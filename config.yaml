@@ -1,0 +1,49 @@
+# === 通讯与轮询配置 ===
+mode: "rtu"                # "rtu" 或 "tcp"
+rtu:
+  port: "/dev/ttyUSB0"
+  baudrate: 9600
+  parity: "N"              # N/E/O
+  stopbits: 1
+  bytesize: 8
+  timeout: 1.0
+tcp:
+  host: "192.168.1.100"
+  port: 502
+
+poll_interval_ms: 10000      # 轮询周期（毫秒）
+max_batch_len: 60            # 连续寄存器最大合并长度（防止一次读太多）
+
+# 生成的点表路径
+tagmap_path: "generated_tagmap.json"
+
+# 旧的单一选择仍保留（可忽略）
+cluster_id: 0
+module_id: 0
+sub_id: 0
+
+# ★ 新增：范围轮询（三种写法都支持：单值、数组、字符串区间）
+#   - 单值：0
+#   - 数组：[0,1,2]
+#   - 区间："0-3"（含头含尾）
+ranges:
+  clusters: "0-1"     # 例如：轮询簇ID 0~1
+  modules:  [0, 1]    # 例如：模块ID 0,1
+  subs:     "0-2"     # 例如：子串ID 0~2
+
+# 地址布局（与你原规范一致：中间三/四位为0）
+addr_layout:
+  cluster:
+    shift: 8
+    base: 0
+  module:
+    shifts: {cluster: 9, module: 6}
+    base: 0
+  substack:
+    shifts: {cluster: 10, module: 7, sub: 6}
+    base: 0
+
+# ★ 命名与推送设置
+key_format: "{name}@C{c}M{m}S{s}"   # 生成前端看到的键名；聚簇/模块/子不存在时会用-1占位
+include_meta: true                  # WebSocket/REST 更新时附带 meta，告诉前端此键名对应的 c/m/s
+float_epsilon: 1e-6                 # 浮点去抖阈值（变化小于此值不推送/不入库）

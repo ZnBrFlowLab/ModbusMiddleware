@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pymodbus==3.6.9
+pandas
+openpyxl
+pydantic
+pyyaml
