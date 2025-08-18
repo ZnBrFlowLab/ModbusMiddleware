@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import asyncio, time, json, yaml, math, random, sqlite3, logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from pydantic import BaseModel
 
@@ -309,7 +309,7 @@ class WriteReq(BaseModel):
     cluster_id: Optional[int] = None
     module_id: Optional[int] = None
     sub_id: Optional[int] = None
-    value: float | int | bool
+    value: Union[float, int, bool]
 
 @app.on_event("startup")
 async def _startup():
