@@ -17,7 +17,7 @@ tcp:
   timeout: 1.0
 
 # 轮询与读取批次
-poll_interval_ms: 500
+poll_interval_ms: 10000
 max_batch_len: 60
 float_epsilon: 1e-6
 

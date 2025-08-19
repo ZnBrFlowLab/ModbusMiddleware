@@ -12,7 +12,7 @@ tcp:
   port: 502
 
 # 模拟轮询周期（毫秒）
-poll_interval_ms: 1000
+poll_interval_ms: 10000
 max_batch_len: 60
 
 # 点表路径（若不存在，模拟器会自动生成一个示例点表）
