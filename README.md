@@ -10,6 +10,18 @@ Modbus 中间件是一个基于 FastAPI 的服务，用于将 Modbus RTU/TCP 设
 - 在没有硬件的环境下可运行的模拟服务
 - 将历史数据导出为 Excel
 
+## 项目结构
+```
+.
+├── app.py                    # 服务入口
+├── app_mock.py               # 模拟服务入口
+├── config.yaml               # 实际环境配置
+├── config_mock.yaml          # 模拟环境配置
+├── export_readings_to_excel.py  # 数据导出工具
+├── requirements.txt          # 依赖列表
+└── README.md                 # 项目文档
+```
+
 ## 安装
 1. 克隆仓库
    ```bash
@@ -90,25 +102,6 @@ database:
 | WebSocket | `/ws` | 建立 WebSocket 连接获取实时更新 | `{ "type": "update", "data": {"温度_1": 25.3} }` |
 
 前端可通过 `http://<服务器地址>:8000/路径` 发送 HTTP 请求，或使用 `ws://<服务器地址>:8000/ws` 建立 WebSocket 连接。
-## 项目结构
-```
-.
-├── app.py                    # 服务入口
-├── app_mock.py               # 模拟服务入口
-├── config.yaml               # 实际环境配置
-├── config_mock.yaml          # 模拟环境配置
-├── export_readings_to_excel.py  # 数据导出工具
-├── requirements.txt          # 依赖列表
-└── README.md                 # 项目文档
-```
 
-## 贡献
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/xxx`)
-3. 提交更改 (`git commit -am 'Add some xxx'`)
-4. 推送分支 (`git push origin feature/xxx`)
-5. 打开 Pull Request
 
-## 许可证
-MIT
 
