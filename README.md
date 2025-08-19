@@ -76,7 +76,20 @@ polling_interval: 5   # 秒
 database:
   file: "data.sqlite3"
 ```
+### 前端接口说明
 
+服务默认监听 `8000` 端口，可通过 `--port` 参数修改。以下接口均在该端口暴露（示例以 `http://localhost:8000` 为例）：
+
+| 方法 | 路径 | 说明 | 返回示例 |
+| ---- | ---- | ---- | ---- |
+| GET | `/tags` | 获取所有点位及元信息 | `{ "points": [...] }` |
+| GET | `/values` | 获取当前所有点位值 | `{ "温度_1": 25.3, ... }` |
+| GET | `/values/{name_full}` | 获取指定点位值 | `{ "value": 25.3, "ts": 1710000000 }` |
+| GET | `/history` | 查询历史数据，需传 `name_full`、`since`、`until` 查询参数 | `{ "data": [{"ts":..., "value":...}, ...] }` |
+| POST | `/write` | 写入点位值，Body: `{ "name_full": "...", "value": ... }` | `{ "ok": true }` |
+| WebSocket | `/ws` | 建立 WebSocket 连接获取实时更新 | `{ "type": "update", "data": {"温度_1": 25.3} }` |
+
+前端可通过 `http://<服务器地址>:8000/路径` 发送 HTTP 请求，或使用 `ws://<服务器地址>:8000/ws` 建立 WebSocket 连接。
 ## 项目结构
 ```
 .
