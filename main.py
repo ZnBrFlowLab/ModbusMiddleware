@@ -143,7 +143,6 @@ def parse_full_key(full_key: str) -> Tuple[str,int,int,int]:
     """
     default_fmt = "{name}@C{c}M{m}S{s}"
     if CFG.get("key_format", default_fmt) != default_fmt:
-        # 不支持通用解析
         return (full_key, -1, -1, -1)
     if "@C" not in full_key or "M" not in full_key or "S" not in full_key:
         return (full_key, -1, -1, -1)
@@ -166,7 +165,6 @@ def build_meta_dict_for_keys(keys: List[str]) -> Dict[str, Dict[str,int]]:
             n,c,m,s = parse_full_key(k)
             meta[k] = {"c": c, "m": m, "s": s}
         else:
-            # 若自定义了 key_format，这里仅返回空占位；建议前端依赖服务端返回的 meta（写入时也传 ids）
             meta[k] = {}
     return meta
 
@@ -275,26 +273,43 @@ def expanded_read_items(max_batch_len: int = 60) -> Dict[Tuple[int,int,int,int,i
         level = p.get("level","cluster")
         combos = id_combinations_for_level(level)
         for (c,m,s) in combos:
-            # 对于不存在的维度(-1)，compose 时不使用，但 key 里保留 -1 以标识层级
             cid = (c if c != -1 else int(CFG.get("cluster_id",0)))
             mid = (m if m != -1 else int(CFG.get("module_id",0)))
             sid = (s if s != -1 else int(CFG.get("sub_id",0)))
             addr = compose_addr_with_ids(p, cid, mid, sid)
             key  = (int(p["slave"]), int(p["func"]), c, m, s)
             groups.setdefault(key, []).append((addr, p, (cid, mid, sid)))
-    # 排序
     for k in list(groups.keys()):
         groups[k].sort(key=lambda x: x[0])
     return groups
 
-# ---------------- SQLite 持久化 ---------------- #
-def init_db():
+# ---------------- SQLite 持久化（含 PRAGMA 优化） ---------------- #
+def _open_sqlite():
     conn = sqlite3.connect(DB_PATH)
+    cfg_sql = (CFG or {}).get("sqlite", {}) or {}
+    try:
+        jm  = cfg_sql.get("journal_mode", "WAL")
+        syn = cfg_sql.get("synchronous", "NORMAL")
+        av  = cfg_sql.get("auto_vacuum", "INCREMENTAL")
+        ps  = int(cfg_sql.get("page_size", 4096))
+        csm = int(cfg_sql.get("cache_size_mb", 64))
+        conn.execute(f"PRAGMA page_size={ps}")
+        conn.execute(f"PRAGMA journal_mode={jm}")
+        conn.execute(f"PRAGMA synchronous={syn}")
+        conn.execute(f"PRAGMA auto_vacuum={av}")
+        conn.execute(f"PRAGMA cache_size={-csm*1024}")  # 负值=KB
+        conn.execute("PRAGMA temp_store=MEMORY")
+    except Exception:
+        pass
+    return conn
+
+def init_db():
+    conn = _open_sqlite()
     with conn:
         conn.execute("""
         CREATE TABLE IF NOT EXISTS readings(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,   -- full_key
+            name TEXT NOT NULL,
             ts   REAL NOT NULL,
             value REAL,
             raw  BLOB
@@ -303,7 +318,7 @@ def init_db():
     conn.close()
 
 def db_insert_many(rows: List[Tuple[str,float,Any,bytes]]):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _open_sqlite()
     with conn:
         conn.executemany("INSERT INTO readings(name, ts, value, raw) VALUES (?,?,?,?)", rows)
     conn.close()
@@ -444,6 +459,7 @@ async def _startup():
     asyncio.create_task(poll_loop())
     asyncio.create_task(db_writer_task())
     asyncio.create_task(_heartbeat_task())
+    asyncio.create_task(_db_retention_task())   # << 新增：周期清理
 
 @app.on_event("shutdown")
 async def _shutdown():
@@ -486,7 +502,7 @@ def health():
 
 @app.get("/history")
 def history(name_full: str = Query(...), since: Optional[float] = Query(None), until: Optional[float] = Query(None), limit: int = Query(1000)):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _open_sqlite()
     cur = conn.cursor()
     sql = "SELECT ts, value FROM readings WHERE name=?"
     params = [name_full]
@@ -592,3 +608,44 @@ async def _heartbeat_task():
         except Exception:
             pass
         await asyncio.sleep(5.0)
+
+# ---------- 数据保留与压缩：仅保留近 N 天（默认 30） ----------
+async def _db_retention_task():
+    days   = int(CFG.get("retention_days", 30))
+    hours  = float(CFG.get("cleanup_interval_hours", 6))
+    av_steps_per_cleanup = 1000  # 每次增量回收步数
+
+    while True:
+        try:
+            cutoff = time.time() - days * 86400.0
+            conn = _open_sqlite()
+            with conn:
+                conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff,))
+                conn.execute(f"PRAGMA incremental_vacuum={av_steps_per_cleanup}")
+            conn.close()
+            logging.info("[DB] 清理完成：仅保留最近 %d 天；cutoff=%.0f", days, cutoff)
+        except Exception as e:
+            logging.exception("[DB] 清理任务异常: %s", e)
+        await asyncio.sleep(hours * 3600.0)
+
+# ---------- 管理 API：手动清理 / FULL VACUUM ----------
+@app.post("/admin/cleanup")
+def admin_cleanup(days: Optional[int] = None):
+    d = int(days if days is not None else CFG.get("retention_days", 30))
+    cutoff = time.time() - d * 86400.0
+    conn = _open_sqlite()
+    with conn:
+        cur = conn.execute("SELECT COUNT(*) FROM readings WHERE ts < ?", (cutoff,))
+        to_del = cur.fetchone()[0]
+        conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff,))
+        conn.execute("PRAGMA incremental_vacuum=2000")
+    conn.close()
+    return {"ok": True, "deleted_rows": to_del, "retention_days": d}
+
+@app.post("/admin/compact")
+def admin_compact_full_vacuum():
+    conn = _open_sqlite()
+    with conn:
+        conn.execute("VACUUM")
+    conn.close()
+    return {"ok": True, "vacuum": "done"}

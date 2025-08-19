@@ -25,9 +25,9 @@ sub_id: 0
 
 # ★ 范围轮询：模拟将对这些范围内的 C/M/S 全部生成数据
 ranges:
-  clusters: "0-1"     # C0~C1
-  modules:  [0,1]     # M0,M1
-  subs:     "0-2"     # S0~S2
+  clusters: "0-3"     # C0~C1
+  modules:  [0,1,2]     # M0,M1
+  subs:     "0-4"     # S0~S2
 
 # 地址布局（与真实一致，虽然模拟不使用真实寄存器）
 addr_layout:
